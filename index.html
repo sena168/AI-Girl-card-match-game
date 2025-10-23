@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Girl Picture Matchup</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Custom Styles for better game aesthetics */
+      :root {
+        --primary-color: #f87171; /* Rose 500 */
+        --secondary-color: #3b82f6; /* Blue 500 */
+        --card-back-color: #1f2937; /* Gray 800 */
+        --card-front-color: #fef3c7; /* Amber 100 */
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0f172a; /* Slate 900 */
+      }
+      .card {
+        aspect-ratio: 1 / 1;
+        perspective: 1000px;
+        cursor: pointer;
+        transition: transform 0.1s; /* Reduced for instant flip testing */
+      }
+      .card-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        transition: transform 0.1s; /* REDUCED for instant flip testing */
+        transform-style: preserve-3d;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 0.5rem;
+      }
+      .card.flipped .card-inner {
+        transform: rotateY(180deg);
+      }
+      .card-front,
+      .card-back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .card-back {
+        background-color: var(--card-back-color);
+        border: 4px solid var(--secondary-color);
+        background-image: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.1) 25%,
+          transparent 25%,
+          transparent 50%,
+          rgba(255, 255, 255, 0.1) 50%,
+          rgba(255, 255, 255, 0.1) 75%,
+          transparent 75%,
+          transparent
+        );
+        background-size: 8px 8px;
+      }
+      .card-front {
+        background-color: var(--card-front-color);
+        transform: rotateY(180deg);
+        /* Ensure the image sits on top of the text from the URL */
+        z-index: 10;
+      }
+      .card-front img {
+        /* Scale image up slightly to cover any URL text if visible */
+        width: 105%;
+        height: 105%;
+        object-fit: cover;
+        border-radius: 0.25rem;
+      }
+
+      /* Status text visibility */
+      #game-container.hidden {
+        display: none;
+      }
+      #results-screen.hidden {
+        display: none;
+      }
+      .match-found {
+        box-shadow: 0 0 20px 5px var(--primary-color);
+        opacity: 0.8;
+        pointer-events: none; /* Make matched cards unclickable */
+      }
+      /* Mobile adjustment for padding */
+      @media (max-width: 640px) {
+        #app {
+          padding: 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen flex items-center justify-center p-4">
+    <div
+      id="app"
+      class="w-full max-w-lg mx-auto bg-gray-800 p-8 rounded-xl shadow-2xl"
+    >
+      <!-- 1. Title Screen (Visible on Load) -->
+      <div
+        id="title-screen"
+        class="text-center transition-opacity duration-500"
+      >
+        <h1 class="text-6xl font-extrabold text-white mb-4 tracking-tighter">
+          AI Girl Matchup
+        </h1>
+        <p class="text-gray-400 mb-8 text-lg">
+          Test your memory. Match the pairs to win the game!
+        </p>
+        <button
+          id="start-button"
+          class="w-full py-4 text-2xl font-bold rounded-lg shadow-lg bg-pink-600 hover:bg-pink-700 text-white transition transform hover:scale-[1.01] active:scale-95"
+        >
+          START GAME
+        </button>
+        <p class="text-sm text-gray-500 mt-6">Current Grid: 4x4</p>
+      </div>
+
+      <!-- 2. Game Container (Hidden on Load) -->
+      <div id="game-container" class="hidden transition-opacity duration-500">
+        <!-- Status Bar -->
+        <div
+          class="flex justify-between items-center mb-6 p-3 bg-gray-700 rounded-lg shadow-md"
+        >
+          <div class="text-left">
+            <p class="text-sm font-medium text-gray-400">Time</p>
+            <p id="timer-display" class="text-2xl font-bold text-white">
+              00:00
+            </p>
+          </div>
+          <div class="text-right">
+            <p class="text-sm font-medium text-gray-400">Clicks</p>
+            <p id="clicks-display" class="text-2xl font-bold text-white">0</p>
+          </div>
+        </div>
+
+        <!-- Card Grid (Set to 4x4) -->
+        <div
+          id="card-grid"
+          class="grid gap-3"
+          style="grid-template-columns: repeat(4, 1fr)"
+        >
+          <!-- Cards will be injected here by JavaScript -->
+        </div>
+      </div>
+
+      <!-- 3. Results Screen (Hidden on Load) -->
+      <div
+        id="results-screen"
+        class="hidden text-center p-6 bg-gray-700 rounded-xl"
+      >
+        <h2 class="text-4xl font-extrabold text-green-400 mb-4">VICTORY!</h2>
+        <p class="text-lg text-gray-300 mb-2">
+          Time Taken: <span id="final-time" class="font-bold text-white"></span>
+        </p>
+        <p class="text-lg text-gray-300 mb-6">
+          Total Clicks:
+          <span id="final-clicks" class="font-bold text-white"></span>
+        </p>
+        <button
+          onclick="window.location.reload()"
+          class="w-full py-3 text-lg font-bold rounded-lg shadow-lg bg-secondary-color hover:bg-blue-600 text-white transition transform hover:scale-[1.01] active:scale-95"
+        >
+          Play Again
+        </button>
+      </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+      // --- Game State Variables ---
+      const cardGrid = document.getElementById('card-grid');
+      const timerDisplay = document.getElementById('timer-display');
+      const clicksDisplay = document.getElementById('clicks-display');
+
+      // Full set for the 4x4 grid (8 unique pairs)
+      const CURRENT_IMAGE_URLS = [
+        './public/resized/AI-girl-card1.jpg',
+        './public/resized/AI-girl-card2.jpg',
+        './public/resized/AI-girl-card3.jpg',
+        './public/resized/AI-girl-card4.jpg',
+        './public/resized/AI-girl-card5.jpg',
+        './public/resized/AI-girl-card6.jpg',
+        './public/resized/AI-girl-card7.jpg',
+        './public/resized/AI-girl-card8.jpg',
+      ];
+
+      let board = [];
+      let flippedCards = [];
+      let matchesFound = 0;
+      let totalClicks = 0;
+      let lockBoard = false; // Prevents clicking more than two cards
+
+      // Timer variables
+      let startTime;
+      let timerInterval;
+
+      // --- Audio Variables and Functions (Phase 2.6) ---
+
+      // Tone.js is great for clean, lightweight SFX generation
+      const audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      console.log('Audio context created. State:', audioContext.state);
+
+      // Simple function to create and play a tone for SFX
+      function playTone(freq, type, duration, volume = 0.5) {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.type = type; // 'sine', 'square', 'sawtooth', 'triangle'
+        oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+
+        gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.001,
+          audioContext.currentTime + duration
+        );
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + duration);
+      }
+
+      const sfx = {
+        click: () => playTone(440, 'sine', 0.05, 0.1), // Soft click
+        match: () => playTone(660, 'triangle', 0.15, 0.4), // Pleasant chime
+        mismatch: () => playTone(150, 'square', 0.2, 0.3), // Low, clear buzz
+      };
+
+      // --- Core Utility Functions ---
+
+      // Fisher-Yates Shuffle Algorithm
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+      }
+
+      function createBoard(imageSet) {
+        // Determine grid size (should always be 4 for this MVP)
+        const pairs = imageSet.length;
+        const totalCards = pairs * 2;
+        const gridSize = Math.sqrt(totalCards); // Will be 4
+
+        cardGrid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+
+        // Create 16 cards (8 pairs)
+        board = [...imageSet, ...imageSet];
+        shuffleArray(board);
+
+        cardGrid.innerHTML = ''; // Clear existing grid
+
+        board.forEach((imageURL, index) => {
+          const cardElement = document.createElement('div');
+          cardElement.classList.add('card');
+          cardElement.setAttribute('data-image', imageURL);
+          cardElement.setAttribute('data-index', index);
+
+          cardElement.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <img src="${imageURL}" alt="Match Item ${index}"
+                                onload="console.log('Image loaded:', this.src, 'Dimensions:', this.naturalWidth + 'x' + this.naturalHeight);"
+                                onerror="console.log('Image failed to load:', this.src); this.src='https://placehold.co/100x100/fef3c7/000?text=Error'; this.style.opacity=0;">
+                        </div>
+                        <div class="card-back">
+                            <!-- Empty back, pattern handles styling -->
+                        </div>
+                    </div>
+                `;
+          cardElement.addEventListener('click', handleCardClick);
+          cardGrid.appendChild(cardElement);
+        });
+      }
+
+      // --- Timer Functions ---
+
+      function updateTimer() {
+        const elapsedTime = Date.now() - startTime;
+        const minutes = Math.floor(elapsedTime / 60000);
+        const seconds = Math.floor((elapsedTime % 60000) / 1000);
+
+        const timeString = `${String(minutes).padStart(2, '0')}:${String(
+          seconds
+        ).padStart(2, '0')}`;
+        timerDisplay.textContent = timeString;
+        return timeString;
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+
+      // --- Game Flow and Setup ---
+
+      document
+        .getElementById('start-button')
+        .addEventListener('click', startGame);
+
+      function startGame() {
+        console.log('Starting game. Audio context state:', audioContext.state);
+        // Reset state
+        matchesFound = 0;
+        totalClicks = 0;
+        flippedCards = [];
+        lockBoard = false;
+        clicksDisplay.textContent = 0;
+        timerDisplay.textContent = '00:00';
+
+        // Initialize and render the 4x4 MVP board
+        createBoard(CURRENT_IMAGE_URLS);
+
+        // Start the timer
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+
+        // UI transition
+        document.getElementById('title-screen').classList.add('hidden');
+        document.getElementById('game-container').classList.remove('hidden');
+        document.getElementById('results-screen').classList.add('hidden');
+      }
+
+      function endGame() {
+        // Get final time before stopping
+        const finalTime = updateTimer();
+        stopTimer();
+
+        // Show results
+        document.getElementById('game-container').classList.add('hidden');
+        document.getElementById('final-time').textContent = finalTime;
+        document.getElementById('final-clicks').textContent = totalClicks;
+        document.getElementById('results-screen').classList.remove('hidden');
+      }
+
+      // --- Card Interaction & Matching Logic ---
+
+      function handleCardClick(event) {
+        if (lockBoard) return;
+
+        const card = event.currentTarget;
+        // Prevent clicking an already flipped or matched card
+        if (
+          card.classList.contains('flipped') ||
+          card.classList.contains('match-found')
+        )
+          return;
+
+        // SFX: Play click sound when card is flipped
+        sfx.click();
+
+        // Increment clicks
+        totalClicks++;
+        clicksDisplay.textContent = totalClicks;
+
+        // Flip the card
+        card.classList.add('flipped');
+        flippedCards.push(card);
+
+        if (flippedCards.length === 2) {
+          lockBoard = true;
+          checkForMatch();
+        }
+      }
+
+      function checkForMatch() {
+        const [card1, card2] = flippedCards;
+        const isMatch =
+          card1.getAttribute('data-image') === card2.getAttribute('data-image');
+
+        if (isMatch) {
+          sfx.match(); // SFX: Play match sound
+          disableCards(card1, card2);
+        } else {
+          sfx.mismatch(); // SFX: Play mismatch sound
+          unflipCards(card1, card2);
+        }
+      }
+
+      function disableCards(card1, card2) {
+        // Mark them as found and remove pointer events via CSS class
+        card1.classList.add('match-found');
+        card2.classList.add('match-found');
+
+        matchesFound++;
+
+        // Check for game end
+        if (matchesFound === CURRENT_IMAGE_URLS.length) {
+          // Add a small delay for match effect before showing results
+          setTimeout(endGame, 800);
+        }
+
+        // Reset for next turn
+        resetBoard();
+      }
+
+      function unflipCards(card1, card2) {
+        setTimeout(() => {
+          // Flip them back over
+          card1.classList.remove('flipped');
+          card2.classList.remove('flipped');
+          resetBoard();
+        }, 200); // Mismatch delay
+      }
+
+      function resetBoard() {
+        [flippedCards, lockBoard] = [[], false];
+      }
+    </script>
+  </body>
+</html>
